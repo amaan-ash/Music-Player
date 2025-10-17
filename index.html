@@ -1,0 +1,1186 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini Music Studio</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        /* Custom styles for the range input (scrubber and volume bar) */
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 8px;
+            background: #444;
+            /* Default track color */
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        /* Thumb styles */
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #34D399;
+            /* Green thumb color */
+            cursor: pointer;
+            box-shadow: 0 0 2px 0 #000;
+        }
+
+        /* Specific style for the progress bar fill (handled via JS for dynamic background) */
+        .scrub-bar-track {
+            /* Base color and dynamic fill managed by JS in the updatePlayerBar function */
+            background: #444;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* Custom scrollbar for a darker aesthetic */
+        .scroll-dark::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .scroll-dark::-webkit-scrollbar-track {
+            background: #1f2937;
+            /* bg-gray-800 */
+        }
+
+        .scroll-dark::-webkit-scrollbar-thumb {
+            background: #4b5563;
+            /* bg-gray-600 */
+            border-radius: 4px;
+        }
+
+        .scroll-dark::-webkit-scrollbar-thumb:hover {
+            background: #6b7280;
+            /* bg-gray-500 */
+        }
+    </style>
+</head>
+
+<body class="bg-gray-950 text-white min-h-screen flex flex-col">
+
+    <header class="bg-gray-950 py-5 px-4 sticky top-0 z-10 shadow-lg border-b border-gray-800">
+        <div class="container mx-auto flex flex-col sm:flex-row justify-between items-center space-y-3 sm:space-y-0">
+            <h1 id="app-title" class="text-3xl font-extrabold tracking-tight cursor-pointer">Music Studio</h1>
+            <nav id="nav-buttons" class="flex space-x-2 p-1 bg-gray-800 rounded-full">
+                <button data-view="home"
+                    class="nav-btn font-semibold py-2 px-4 rounded-full transition duration-150 bg-white text-black">Home</button>
+                <button data-view="library"
+                    class="nav-btn font-semibold py-2 px-4 rounded-full transition duration-150 text-gray-400">Library</button>
+                <button data-view="search"
+                    class="nav-btn font-semibold py-2 px-4 rounded-full transition duration-150 text-gray-400">Search</button>
+            </nav>
+            <button id="sign-out-btn"
+                class="text-sm font-semibold text-red-400 hover:text-red-300 transition hidden">Sign Out</button>
+        </div>
+    </header>
+
+    <main id="main-content" class="container mx-auto p-6 flex-grow pb-28 scroll-dark overflow-y-auto">
+        <div class="text-center py-20">
+            <p class="text-xl text-gray-400">Initializing Application...</p>
+        </div>
+    </main>
+
+    <div id="create-playlist-modal"
+        class="fixed inset-0 bg-black bg-opacity-70 justify-center items-center z-50 hidden">
+        <div class="bg-gray-800 p-8 rounded-xl shadow-2xl w-full max-w-md border border-gray-700">
+            <h3 class="text-2xl font-bold mb-4 text-white">Create New Playlist</h3>
+            <input type="text" id="playlist-name-input" placeholder="Playlist Name"
+                class="w-full p-3 rounded-lg bg-gray-700 text-white border border-gray-600 focus:ring-green-500 focus:outline-none mb-4" />
+            <div class="flex justify-end space-x-3">
+                <button id="modal-cancel-btn"
+                    class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition">
+                    Cancel
+                </button>
+                <button id="modal-create-btn"
+                    class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50"
+                    disabled>
+                    Create
+                </button>
+            </div>
+            <p id="modal-error-text" class="text-sm text-red-400 mt-3 hidden">You must be logged in to save playlists.
+            </p>
+        </div>
+    </div>
+
+
+    <footer id="player-bar"
+        class="fixed bottom-0 left-0 right-0 bg-black p-3 shadow-2xl z-20 h-20 md:h-24 border-t border-gray-800">
+        <div class="container mx-auto flex items-center justify-between h-full">
+
+            <div class="flex items-center w-1/3 min-w-0">
+                <div
+                    class="relative w-12 h-12 md:w-16 md:h-16 rounded-lg mr-3 md:mr-4 flex items-center justify-center bg-gray-800 shadow-xl overflow-hidden">
+                    <img id="player-artwork" src="" alt="Artwork"
+                        class="absolute inset-0 w-full h-full object-cover transition-opacity duration-300 opacity-0" />
+                    <svg id="music-icon-placeholder" class="w-8 h-8 md:w-12 md:h-12 text-gray-500"
+                        xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                        <path fill-rule="evenodd"
+                            d="M19.327 7.086c.642.109 1.165.658 1.165 1.309v4.208a.75.75 0 0 1-.749.721 2.25 2.25 0 0 1-2.246 2.146.75.75 0 0 1-.747-.721v-5.208a.75.75 0 0 1 .748-.721 2.25 2.25 0 0 1 2.247 2.146.75.75 0 0 0 1.5 0 3.75 3.75 0 0 0-3.747-3.596.75.75 0 0 0-.748.721v4.458a2.25 2.25 0 0 1-2.247 2.146.75.75 0 0 1-.748-.721V6.208a.75.75 0 0 1 .748-.721 2.25 2.25 0 0 1 2.247 2.146.75.75 0 0 0 1.5 0 3.75 3.75 0 0 0-3.748-3.596.75.75 0 0 0-.747.721v6.958a2.25 2.25 0 0 1-2.247 2.146.75.75 0 0 1-.748-.721V9.208a.75.75 0 0 1 .748-.721 2.25 2.25 0 0 1 2.247 2.146.75.75 0 0 0 1.5 0 3.75 3.75 0 0 0-3.747-3.596.75.75 0 0 0-.748.721v4.458a2.25 2.25 0 0 1-2.247 2.146.75.75 0 0 1-.748-.721V3.708a.75.75 0 0 1 1.055-.676l14.452 7.734c.484.26.484.972 0 1.232l-14.452 7.734a.75.75 0 0 1-1.055-.676v-5.208a2.25 2.25 0 0 1 2.247 2.146.75.75 0 0 0 1.5 0 3.75 3.75 0 0 0-3.747-3.596.75.75 0 0 0-.748.721v4.458a2.25 2.25 0 0 1-2.247 2.146.75.75 0 0 1-.748-.721V7.708a.75.75 0 0 1 1.055-.676l1.785.957a.75.75 0 0 0 1.25-.668V4.708a.75.75 0 0 1 1.055-.676l1.785.957a.75.75 0 0 0 1.25-.668V7.708a.75.75 0 0 1 1.055-.676Z"
+                            clip-rule="evenodd" />
+                    </svg>
+                </div>
+
+                <div class="truncate hidden sm:block">
+                    <p id="player-title" class="font-semibold text-white truncate text-base">Not Playing</p>
+                    <p id="player-artist" class="text-xs text-gray-400 truncate">Select a song</p>
+                </div>
+            </div>
+
+            <div class="flex flex-col items-center w-full sm:w-1/3 px-2 md:px-4">
+
+                <div class="flex items-center space-x-6 mb-1 md:mb-2">
+                    <button id="prev-btn"
+                        class="text-white hover:text-gray-300 transition-colors opacity-80 hover:opacity-100">
+                        <svg class="w-6 h-6 md:w-8 md:h-8" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+                            fill="currentColor">
+                            <path
+                                d="M4.5 4.5a.75.75 0 0 0 0 1.5h1.5v12a.75.75 0 0 0 1.5 0v-12h1.5a.75.75 0 0 0 0-1.5H4.5ZM19.22 12.35l-7.5 5.25a.75.75 0 0 1-1.22-.53V7.93a.75.75 0 0 1 1.22-.53l7.5 5.25a.75.75 0 0 1 0 1.06Z" />
+                        </svg>
+                    </button>
+                    <button id="play-pause-btn" class="text-white hover:text-gray-300 transition-colors">
+                        <svg id="play-icon" class="w-7 h-7 md:w-10 md:h-10 text-green-500"
+                            xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                            <path fillRule="evenodd"
+                                d="M4.5 5.653c0-1.427 1.529-2.316 2.753-1.674l8.774 4.708a3 3 0 0 1 0 5.342l-8.774 4.708C6.029 20.316 4.5 19.427 4.5 18V5.653Z"
+                                clipRule="evenodd" />
+                        </svg>
+                        <svg id="pause-icon" class="w-7 h-7 md:w-10 md:h-10 text-green-500 hidden"
+                            xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                            <path fillRule="evenodd"
+                                d="M6.75 5.25a.75.75 0 0 1 .75-.75H9a.75.75 0 0 1 .75.75v13.5a.75.75 0 0 1-.75.75H7.5a.75.75 0 0 1-.75-.75V5.25Zm7.5 0a.75.75 0 0 1 .75-.75H16.5a.75.75 0 0 1 .75.75v13.5a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1-.75-.75V5.25Z"
+                                clipRule="evenodd" />
+                        </svg>
+                    </button>
+                    <button id="next-btn"
+                        class="text-white hover:text-gray-300 transition-colors opacity-80 hover:opacity-100">
+                        <svg class="w-6 h-6 md:w-8 md:h-8" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+                            fill="currentColor">
+                            <path
+                                d="M19.5 4.5a.75.75 0 0 1 0 1.5h-1.5v12a.75.75 0 0 1-1.5 0v-12h-1.5a.75.75 0 0 1 0-1.5h4.5ZM4.78 11.65l7.5-5.25a.75.75 0 0 1 1.22.53v8.64a.75.75 0 0 1-1.22.53l-7.5-5.25a.75.75 0 0 1 0-1.06Z" />
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="hidden sm:flex items-center w-full">
+                    <span id="current-time" class="text-xs text-gray-400 mr-2">0:00</span>
+                    <input type="range" id="scrub-bar" value="0" min="0" max="0" step="0.01"
+                        class="scrub-bar-track flex-grow" />
+                    <span id="duration-time" class="text-xs text-gray-400 ml-2">0:00</span>
+                </div>
+            </div>
+
+            <div class="hidden md:flex items-center w-1/3 justify-end space-x-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400" viewBox="0 0 20 20"
+                    fill="currentColor">
+                    <path fillRule="evenodd"
+                        d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM14.657 5.343a1 1 0 010 1.414A5 5 0 0116 10a5 5 0 01-1.343 3.243 1 1 0 01-1.414-1.414A3 3 0 0014 10a3 3 0 00-.879-2.121 1 1 0 011.414-1.414z"
+                        clipRule="evenodd" />
+                </svg>
+                <input type="range" id="volume-control" min="0" max="1" step="0.01" value="1"
+                    class="w-24 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer" />
+            </div>
+
+        </div>
+    </footer>
+
+
+    <script type="module">
+        // --- AUTH/DATA MODULES REMOVED - Using LocalStorage instead ---
+
+        // --- GLOBAL STATE ---
+        let userId = null;
+        let isAuthReady = false;
+        let currentView = 'auth';
+        let playlists = [];
+        let searchResults = [];
+        const INITIAL_MOCK_SONGS = [
+            { id: 'L1', title: "Lofi Study Beats", artist: "Local Artist A", source: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", artwork: "https://placehold.co/100x100/34D399/101010?text=LOFI+A", type: 'Local Sample' },
+            { id: 'L2', title: "Roadtrip Anthem", artist: "The Mock Band", source: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3", artwork: "https://placehold.co/100x100/FACC15/101010?text=ROAD+B", type: 'Local Sample' },
+            { id: 'L3', title: "90s Pop Throwback", artist: "Studio 97", source: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3", artwork: "https://placehold.co/100x100/FB7185/101010?text=POP+C", type: 'Local Sample' },
+        ];
+        let localSongs = [...INITIAL_MOCK_SONGS]; // This list includes mock and user-uploaded songs
+        let currentTrack = null;
+        let currentPlaylist = localSongs; // Start with local songs as the default playlist
+        let currentTrackIndex = -1;
+        let isPlaying = false;
+        let isSeeking = false;
+        const audio = new Audio();
+
+        // Canvas Global Variables
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const localStorageKey = 'music_studio_users';
+
+        // --- UTILITIES ---
+
+        /**
+         * Converts seconds to M:SS format.
+         * @param {number} seconds
+         * @returns {string} Formatted time
+         */
+        function formatTime(seconds) {
+            const min = Math.floor(seconds / 60);
+            const sec = Math.floor(seconds % 60);
+            return `${min}:${sec < 10 ? '0' : ''}${sec}`;
+        }
+
+        /**
+         * Simple utility to show/hide a custom error modal (since alert() is forbidden).
+         * @param {string} message 
+         */
+        function showMessage(message) {
+            const existing = document.getElementById('temp-message-box');
+            if (existing) existing.remove();
+
+            const msgBox = document.createElement('div');
+            msgBox.id = 'temp-message-box';
+            msgBox.className = 'fixed top-4 right-4 p-4 bg-red-700 text-white rounded-xl shadow-2xl z-50 transition-transform duration-300 transform translate-x-full';
+            msgBox.innerHTML = `<p class="font-bold">Message:</p><p>${message}</p>`;
+            document.body.appendChild(msgBox);
+
+            setTimeout(() => {
+                msgBox.classList.remove('translate-x-full');
+                msgBox.classList.add('translate-x-0');
+            }, 10);
+
+            setTimeout(() => {
+                msgBox.classList.remove('translate-x-0');
+                msgBox.classList.add('translate-x-full');
+                setTimeout(() => msgBox.remove(), 300);
+            }, 4000);
+        }
+
+        // --- LOCAL STORAGE AUTHENTICATION & DATA STORAGE ---
+
+        /**
+         * Checks LocalStorage for a logged-in user and initializes state.
+         */
+        function initializeLocalStorage() {
+            try {
+                // Get the current user from session storage (used for persistence across reloads)
+                const storedUser = localStorage.getItem('music_studio_current_user');
+
+                if (storedUser) {
+                    const user = JSON.parse(storedUser);
+                    updateUserState(user);
+                } else {
+                    // No user logged in, force to auth view
+                    updateUserState(null);
+                }
+            } catch (e) {
+                console.error("Failed to initialize local storage:", e);
+                document.getElementById('main-content').innerHTML = `
+                    <div class="text-center py-20 bg-red-900/20 p-6 rounded-xl">
+                        <p class="text-2xl text-red-400 font-bold">Error Initializing App</p>
+                        <p class="text-red-300 mt-2">Could not access local storage. Ensure it's enabled.</p>
+                    </div>
+                `;
+            }
+        }
+
+        /**
+         * Updates the global state based on the user object.
+         * @param {object|null} user - The user object or null if signed out.
+         */
+        function updateUserState(user) {
+            if (user && user.uid) {
+                userId = user.uid;
+                localStorage.setItem('music_studio_current_user', JSON.stringify(user));
+                document.getElementById('sign-out-btn').classList.remove('hidden');
+                if (currentView === 'auth' || currentView === 'initial') {
+                    // Automatically switch to home only if coming from auth/initial state
+                    switchView('home');
+                }
+            } else {
+                userId = null;
+                localStorage.removeItem('music_studio_current_user');
+                document.getElementById('sign-out-btn').classList.add('hidden');
+                // Force view to auth when user logs out or is anonymous/unauthenticated
+                switchView('auth');
+            }
+            isAuthReady = true;
+            setupLocalStorageListeners(); // Load data for the new user state
+        }
+
+        /**
+         * Mocks Firebase's signInWithEmailAndPassword using localStorage.
+         */
+        async function signInWithEmailAndPassword(email, password) {
+            const users = JSON.parse(localStorage.getItem(localStorageKey) || '{}');
+            const userEntry = Object.values(users).find(u => u.email === email && u.password === password);
+
+            if (userEntry) {
+                updateUserState(userEntry);
+                return { user: userEntry };
+            } else {
+                // Mimic Firebase error structure for consistency
+                throw { code: 'auth/invalid-credential', message: 'Invalid email or password.' };
+            }
+        }
+
+        /**
+         * Mocks Firebase's createUserWithEmailAndPassword using localStorage.
+         */
+        async function createUserWithEmailAndPassword(email, password) {
+            const users = JSON.parse(localStorage.getItem(localStorageKey) || '{}');
+
+            if (Object.values(users).some(u => u.email === email)) {
+                // Mimic Firebase error structure for consistency
+                throw { code: 'auth/email-already-in-use', message: 'Email is already in use.' };
+            }
+
+            const newUid = `local-user-${Date.now()}`;
+            const newUser = { uid: newUid, email, password };
+
+            users[newUid] = newUser;
+            localStorage.setItem(localStorageKey, JSON.stringify(users));
+
+            updateUserState(newUser);
+            return { user: newUser };
+        }
+
+        /**
+         * Mocks Firebase's signOut.
+         */
+        async function signOut() {
+            updateUserState(null);
+            // Simulates success
+        }
+
+
+        // --- LOCAL STORAGE DATA LOGIC (REPLACES FIRESTORE) ---
+
+        /**
+         * Loads user playlists from localStorage based on the current userId.
+         */
+        function setupLocalStorageListeners() {
+            playlists = []; // Clear current state
+            if (!userId) {
+                if (currentView === 'library') renderLibrary();
+                return;
+            }
+
+            try {
+                const key = `playlists_${userId}`;
+                const storedPlaylists = localStorage.getItem(key);
+                if (storedPlaylists) {
+                    playlists = JSON.parse(storedPlaylists);
+                }
+            } catch (error) {
+                console.error("Local Storage Playlists Load Error:", error);
+                showMessage("Could not load local playlists.");
+            }
+
+            // Re-render the Library view if we are currently on it
+            if (currentView === 'library') {
+                renderLibrary();
+            }
+        }
+
+        /**
+         * Saves the current playlists array to localStorage.
+         */
+        function savePlaylistsToLocalStorage() {
+            if (!userId) return; // Cannot save if not logged in
+            try {
+                const key = `playlists_${userId}`;
+                localStorage.setItem(key, JSON.stringify(playlists));
+            } catch (error) {
+                console.error("Local Storage Playlists Save Error:", error);
+                showMessage("Failed to save playlist to local storage.");
+            }
+        }
+
+        /**
+         * Creates a new playlist document in localStorage.
+         */
+        async function handleCreatePlaylist() {
+            const playlistName = document.getElementById('playlist-name-input').value.trim();
+            if (!playlistName) return;
+
+            if (!userId) {
+                showMessage("User ID not ready. Please log in.");
+                return;
+            }
+
+            try {
+                const newPlaylist = {
+                    id: `p-${Date.now()}`, // Simple unique ID
+                    name: playlistName,
+                    createdAt: new Date().toISOString(),
+                    songs: [],
+                };
+
+                playlists.push(newPlaylist);
+                savePlaylistsToLocalStorage();
+
+                // Close modal and clear input
+                document.getElementById('playlist-name-input').value = '';
+                document.getElementById('create-playlist-modal').classList.add('hidden');
+
+                // Re-render to show new playlist
+                if (currentView === 'library') {
+                    renderLibrary();
+                }
+            } catch (error) {
+                console.error("Error creating local playlist:", error);
+                showMessage("Failed to create playlist.");
+            }
+        }
+
+        // --- AUDIO PLAYER LOGIC ---
+
+        /**
+         * Loads a track, sets the current playlist context, and starts playback.
+         * @param {object} track - The song object.
+         * @param {Array<object>} playlist - The playlist the song belongs to.
+         */
+        function playTrack(track, playlist) {
+            if (!track || !track.source) return;
+
+            currentTrack = track;
+
+            // Update playlist context only if a new one is provided
+            if (playlist) {
+                currentPlaylist = playlist;
+                currentTrackIndex = playlist.findIndex(s => s.id === track.id);
+            } else {
+                currentTrackIndex = currentPlaylist.findIndex(s => s.id === track.id);
+            }
+
+            audio.src = track.source;
+            audio.load();
+
+            audio.play().catch(error => {
+                console.warn("Autoplay was prevented (requires user gesture). Please click play manually.", error);
+                isPlaying = false;
+                updatePlayPauseButton();
+            });
+            isPlaying = true;
+            updatePlayerBar();
+            updatePlayPauseButton();
+            // Re-render the current view to highlight the playing track if needed
+            if (currentView === 'library') renderLibrary();
+            if (currentView === 'search') renderSearch();
+            if (currentView === 'home') renderHome();
+        }
+
+        function handlePlayPause() {
+            // Use localSongs as the default playlist if nothing is currently playing
+            if (!currentTrack && localSongs.length > 0) {
+                // If nothing is loaded, load the first local song
+                playTrack(localSongs[0], localSongs);
+            } else if (audio.paused) {
+                audio.play().catch(error => {
+                    console.warn("Play failed after interaction:", error);
+                    isPlaying = false;
+                });
+                isPlaying = true;
+            } else {
+                audio.pause();
+                isPlaying = false;
+            }
+            updatePlayPauseButton();
+        }
+
+        function playNext() {
+            if (currentPlaylist.length === 0 || currentTrackIndex === -1) return;
+
+            let nextIndex = (currentTrackIndex + 1) % currentPlaylist.length;
+            const nextTrack = currentPlaylist[nextIndex];
+
+            if (nextTrack) {
+                currentTrackIndex = nextIndex;
+                playTrack(nextTrack);
+            }
+        }
+
+        function playPrev() {
+            if (currentPlaylist.length === 0 || currentTrackIndex === -1) return;
+
+            let prevIndex = currentTrackIndex - 1;
+            if (prevIndex < 0) {
+                prevIndex = currentPlaylist.length - 1; // Loop back to the end
+            }
+            const prevTrack = currentPlaylist[prevIndex];
+
+            if (prevTrack) {
+                currentTrackIndex = prevIndex;
+                playTrack(prevTrack);
+            }
+        }
+
+        /**
+         * Updates the UI elements of the player bar.
+         */
+        function updatePlayerBar() {
+            const titleEl = document.getElementById('player-title');
+            const artistEl = document.getElementById('player-artist');
+            const artworkEl = document.getElementById('player-artwork');
+            const musicIconEl = document.getElementById('music-icon-placeholder'); // NEW ICON ELEMENT
+
+            if (currentTrack) {
+                const artworkSrc = currentTrack?.artwork?.replace('100x100bb', '200x200bb') || '';
+
+                titleEl.textContent = currentTrack.title;
+                artistEl.textContent = currentTrack.artist;
+                artworkEl.src = artworkSrc;
+
+                // Show artwork, hide icon
+                artworkEl.classList.remove('opacity-0');
+                musicIconEl.classList.add('hidden');
+
+                artworkEl.onerror = () => {
+                    artworkEl.src = ''; // Clear broken URL
+                    artworkEl.classList.add('opacity-0'); // Hide broken image
+                    musicIconEl.classList.remove('hidden'); // Show icon as fallback
+                };
+            } else {
+                titleEl.textContent = 'Not Playing';
+                artistEl.textContent = 'Select a song';
+                artworkEl.src = ''; // Clear image source
+                // Hide image, show icon
+                artworkEl.classList.add('opacity-0');
+                musicIconEl.classList.remove('hidden');
+            }
+        }
+
+        /**
+         * Updates the play/pause button icon.
+         */
+        function updatePlayPauseButton() {
+            const playIcon = document.getElementById('play-icon');
+            const pauseIcon = document.getElementById('pause-icon');
+            if (isPlaying) {
+                playIcon.classList.add('hidden');
+                pauseIcon.classList.remove('hidden');
+            } else {
+                playIcon.classList.remove('hidden');
+                pauseIcon.classList.add('hidden');
+            }
+        }
+
+        // --- AUDIO EVENT LISTENERS SETUP ---
+        function setupAudioListeners() {
+            const scrubBar = document.getElementById('scrub-bar');
+
+            audio.addEventListener('loadedmetadata', () => {
+                const duration = audio.duration;
+                scrubBar.max = duration;
+                document.getElementById('duration-time').textContent = formatTime(duration);
+            });
+
+            audio.addEventListener('timeupdate', () => {
+                if (!isSeeking) {
+                    const currentTime = audio.currentTime;
+                    scrubBar.value = currentTime;
+                    document.getElementById('current-time').textContent = formatTime(currentTime);
+
+                    // Dynamic scrubber background update
+                    const percent = (currentTime / audio.duration) * 100 || 0;
+                    scrubBar.style.background = `linear-gradient(to right, #34D399 0%, #34D399 ${percent}%, #444 ${percent}%, #444 100%)`;
+                }
+            });
+
+            audio.addEventListener('ended', playNext);
+            audio.addEventListener('play', () => { isPlaying = true; updatePlayPauseButton(); });
+            audio.addEventListener('pause', () => { isPlaying = false; updatePlayPauseButton(); });
+
+            // Scrubber control
+            scrubBar.addEventListener('mousedown', () => { isSeeking = true; });
+            scrubBar.addEventListener('mouseup', () => {
+                isSeeking = false;
+                audio.currentTime = scrubBar.value;
+            });
+            scrubBar.addEventListener('change', () => {
+                // Handle keyboard/touch scrub end
+                if (!isSeeking) {
+                    audio.currentTime = scrubBar.value;
+                }
+            });
+            scrubBar.addEventListener('input', (e) => {
+                // Update time display while scrubbing
+                document.getElementById('current-time').textContent = formatTime(e.target.value);
+            });
+
+            // Volume control
+            const volumeControl = document.getElementById('volume-control');
+            volumeControl.addEventListener('input', (e) => {
+                audio.volume = e.target.value;
+            });
+
+            // Player button controls
+            document.getElementById('play-pause-btn').addEventListener('click', handlePlayPause);
+            document.getElementById('next-btn').addEventListener('click', playNext);
+            document.getElementById('prev-btn').addEventListener('click', playPrev);
+        }
+
+        // --- LOCAL FILE HANDLING (CORE NEW FEATURE) ---
+
+        /**
+         * Handles selecting audio files from the user's local device.
+         * @param {Event} event 
+         */
+        function handleFileSelect(event) {
+            const files = event.target.files;
+            if (files.length === 0) return;
+
+            const newSongs = [];
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                // Ensure the file is an audio file
+                if (file.type.startsWith('audio/')) {
+                    const newSong = {
+                        // Generate a unique ID for local files
+                        id: `local-${crypto.randomUUID()}`,
+                        // Remove file extension for display title
+                        title: file.name.replace(/\.[^/.]+$/, "") || 'Untitled Track',
+                        artist: 'Local File',
+                        // Create a playable URL for the file in the current session
+                        source: URL.createObjectURL(file),
+                        artwork: 'https://placehold.co/100x100/3B82F6/101010?text=USER+FILE',
+                        type: 'Local File'
+                    };
+                    newSongs.push(newSong);
+                } else {
+                    console.warn(`Skipped file ${file.name}: Not an audio file.`);
+                }
+            }
+
+            if (newSongs.length > 0) {
+                // Add new local songs to the existing list
+                localSongs = [...localSongs, ...newSongs];
+                // Re-render the Library screen to show the new songs immediately
+                if (currentView === 'library') {
+                    renderLibrary();
+                }
+                // Clear the file input value so the same file can be re-selected if needed
+                event.target.value = null;
+            }
+        }
+
+        // --- ITUNES SEARCH LOGIC ---
+
+        /**
+         * Searches the iTunes API for music.
+         * @param {string} term 
+         */
+        async function handleSearch(term) {
+            if (!term) return;
+
+            document.getElementById('search-results-container').innerHTML = `
+                <p class="text-xl text-green-500 font-medium flex items-center space-x-2">
+                    <svg class="animate-spin h-5 w-5 text-green-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    <span>Searching for "${term}"...</span>
+                </p>
+            `;
+
+            try {
+                const url = `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&country=US&media=music&entity=song&limit=30`;
+                const response = await fetch(url);
+                const data = await response.json();
+
+                searchResults = data.results
+                    .filter(item => item.kind === 'song' && item.previewUrl)
+                    .map(item => ({
+                        id: item.trackId,
+                        title: item.trackName,
+                        artist: item.artistName,
+                        source: item.previewUrl,
+                        artwork: item.artworkUrl100,
+                        type: 'iTunes'
+                    }));
+
+                renderSearchContent(); // Re-render the search content with results
+
+                if (searchResults.length === 0) {
+                    document.getElementById('search-results-container').innerHTML = `<p class="text-gray-400">No playable results found for "${term}". Try another search.</p>`;
+                }
+
+            } catch (error) {
+                console.error("iTunes API Fetch Error:", error);
+                searchResults = [];
+                renderSearchContent();
+                showMessage("Search failed. Check your network connection.");
+            }
+        }
+
+
+        // --- UI RENDERING FUNCTIONS ---
+
+        /**
+         * Switches the main view and updates navigation buttons.
+         * @param {string} viewName - 'home', 'library', 'search', or 'auth'.
+         */
+        function switchView(viewName) {
+            // Access Control Logic: Block access to protected views if not logged in
+            if (viewName !== 'auth' && !userId) {
+                showMessage("Please sign in or sign up to access the music library and features.");
+                viewName = 'auth'; // Force change the view to 'auth'
+            }
+
+            currentView = viewName;
+            const mainContent = document.getElementById('main-content');
+
+            // Update nav buttons styling
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                if (btn.dataset.view === viewName) {
+                    btn.classList.add('bg-white', 'text-black');
+                    btn.classList.remove('text-gray-400');
+                } else {
+                    btn.classList.remove('bg-white', 'text-black');
+                    btn.classList.add('text-gray-400');
+                }
+            });
+
+            // Render the new content
+            switch (viewName) {
+                case 'auth':
+                    renderAuth();
+                    break;
+                case 'home':
+                    renderHome();
+                    break;
+                case 'library':
+                    renderLibrary();
+                    break;
+                case 'search':
+                    renderSearch();
+                    break;
+            }
+        }
+
+        function createIcon(dPath, classes) {
+            return `<svg class="${classes}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="${dPath}" /></svg>`;
+        }
+
+        function createLibraryIcon() {
+            return `<svg class="w-8 h-8 text-green-500 mb-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H18a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5A2.5 2.5 0 0 1 4 19.5v-15Z" />
+                <path d="M8 8h8v1H8V8Zm0 3h8v1H8v-1Zm0 3h5v1H8v-1Z" fill="#374151" />
+            </svg>`;
+        }
+
+        function createPlusIcon(classes) {
+            return `<svg class="${classes}" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>`;
+        }
+
+        /**
+         * Generates the HTML for a song card.
+         * @param {object} song - The song object.
+         * @param {string} playlistType - 'local' or 'search'.
+         */
+        function createSongCard(song, playlistType) {
+            const artworkSrc = song.artwork ? song.artwork.replace('100x100bb', '200x200bb') : `https://placehold.co/100x100/101010/ffffff?text=${song.id}`;
+            const isCurrent = currentTrack && currentTrack.id === song.id;
+            const sourceLabel = song.type === 'iTunes' ? 'iTunes Preview (30s)' : (song.type === 'Local File' ? 'Your File' : 'Local Sample');
+
+            // Determine the playlist source for the click handler
+            const playlistSource = playlistType === 'search' ? 'search' : 'local';
+
+            return `
+                <div 
+                    class="bg-gray-900 rounded-xl p-4 flex items-center shadow-2xl transition-all cursor-pointer song-card ${isCurrent ? 'border-2 border-green-500 scale-[1.02]' : 'border-2 border-transparent hover:border-gray-800'}"
+                    data-song-id="${song.id}" 
+                    data-playlist-type="${playlistSource}"
+                >
+                    <img 
+                        src="${artworkSrc}" 
+                        alt="Artwork" 
+                        onerror="this.onerror=null;this.src='https://placehold.co/100x100/101010/ffffff?text=X'"
+                        class="w-20 h-20 rounded-lg mr-4 object-cover shadow-xl"
+                    />
+                    <div class="flex-grow min-w-0 truncate">
+                        <p class="font-bold text-lg text-white truncate">${song.title}</p>
+                        <p class="text-sm text-gray-400 truncate">${song.artist}</p>
+                        <p class="text-xs font-medium text-red-500 mt-1">${sourceLabel}</p>
+                    </div>
+                </div>
+            `;
+        }
+
+        /**
+         * Renders the Authentication screen.
+         */
+        function renderAuth() {
+            document.getElementById('main-content').innerHTML = `
+                <div class="flex justify-center items-center h-full min-h-[50vh] pt-10 sm:pt-20">
+                    <div class="p-8 bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm border border-gray-800 text-center space-y-6">
+                        <h2 id="auth-title" class="text-3xl font-extrabold text-white">Sign In</h2>
+                        <p id="auth-subtitle" class="text-gray-400">Log in to access your playlists or sign up.</p>
+                        
+                        <div class="space-y-4">
+                            <input
+                                type="email"
+                                id="auth-email"
+                                placeholder="Email"
+                                class="w-full p-3 rounded-xl bg-gray-800 text-white border border-gray-700 focus:ring-green-500 focus:outline-none placeholder-gray-500"
+                            />
+                            <input
+                                type="password"
+                                id="auth-password"
+                                placeholder="Password"
+                                class="w-full p-3 rounded-xl bg-gray-800 text-white border border-gray-700 focus:ring-green-500 focus:outline-none placeholder-gray-500"
+                            />
+                        </div>
+
+                        <p id="auth-error" class="text-sm text-red-500 font-medium bg-red-900/30 p-2 rounded-lg hidden"></p>
+
+                        <button 
+                            id="auth-submit-btn"
+                            class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-xl transition disabled:opacity-50"
+                        >
+                            Sign In
+                        </button>
+
+                        <button 
+                            id="auth-toggle-mode"
+                            class="text-sm text-green-400 hover:text-green-300 transition"
+                            data-mode="login"
+                        >
+                            Need an account? Sign Up
+                        </button>
+                        
+                        <p class="text-xs text-gray-500 pt-4">Current App ID: <span class="text-gray-300">${appId}</span></p>
+                    </div>
+                </div>
+            `;
+            setupAuthEventListeners();
+        }
+
+        /**
+         * Renders the Home screen.
+         */
+        function renderHome() {
+            const songCards = localSongs.map(song => createSongCard(song, 'local')).join('');
+
+            document.getElementById('main-content').innerHTML = `
+                <div class="space-y-10">
+                    <h2 class="text-4xl font-extrabold text-white">Welcome Back!</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div data-nav="library" class="bg-gray-900 p-6 rounded-xl shadow-xl cursor-pointer hover:bg-gray-800 transition transform hover:-translate-y-1">
+                            ${createLibraryIcon()}
+                            <h3 class="text-2xl font-semibold">Your Music Library</h3>
+                            <p class="text-gray-400">View and manage your playlists and local samples.</p>
+                        </div>
+                        <div data-nav="search" class="bg-gray-900 p-6 rounded-xl shadow-xl cursor-pointer hover:bg-gray-800 transition transform hover:-translate-y-1">
+                            ${createIcon('M19.5 4.5a.75.75 0 0 1 0 1.5h-1.5v12a.75.75 0 0 1-1.5 0v-12h-1.5a.75.75 0 0 1 0-1.5h4.5ZM4.78 11.65l7.5-5.25a.75.75 0 0 1 1.22.53v8.64a.75.75 0 0 1-1.22.53l-7.5-5.25a.75.75 0 0 1 0-1.06Z', 'w-10 h-10 text-white mb-3')}
+                            <h3 class="2xl font-semibold">Search iTunes</h3>
+                            <p class="text-gray-400">Explore and play 30-second previews from the Apple Music catalog.</p>
+                        </div>
+                        <div id="open-modal-btn-home" class="bg-gray-900 p-6 rounded-xl shadow-xl cursor-pointer hover:bg-gray-800 transition transform hover:-translate-y-1">
+                            ${createPlusIcon('w-10 h-10 text-green-500 mb-3')}
+                            <h3 class="2xl font-semibold">Create New Playlist</h3>
+                            <p class="text-gray-400">Start organizing your favorite songs.</p>
+                        </div>
+                    </div>
+                    
+                    <h3 class="text-3xl font-bold mt-10">Local Sample Tracks (${localSongs.length})</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                         ${songCards}
+                    </div>
+                </div>
+            `;
+            document.getElementById('open-modal-btn-home').addEventListener('click', () => {
+                document.getElementById('create-playlist-modal').classList.remove('hidden');
+            });
+            setupCardClickListeners(localSongs, 'local');
+            setupNavCardListeners();
+        }
+
+        /**
+         * Renders the Library screen.
+         */
+        function renderLibrary() {
+            const playlistCards = playlists.map(p => `
+                <div class="bg-gray-800 rounded-xl p-4 shadow-xl flex flex-col items-start space-y-2 hover:bg-gray-700 transition cursor-pointer">
+                    ${createLibraryIcon()}
+                    <p class="font-bold text-xl text-white truncate w-full">${p.name}</p>
+                    <p class="text-sm text-gray-400">${p.songs.length} songs</p>
+                    <button class="text-xs text-white bg-green-600 px-3 py-1 rounded-full hover:bg-green-700 transition">View</button>
+                </div>
+            `).join('');
+
+            const songCards = localSongs.map(song => createSongCard(song, 'local')).join('');
+
+            document.getElementById('main-content').innerHTML = `
+                <div class="space-y-10">
+                    
+                    <input 
+                        type="file" 
+                        accept="audio/*" 
+                        multiple 
+                        id="audio-upload-input" 
+                        class="hidden" 
+                    />
+
+                    <div class="flex justify-between items-center mb-6 flex-wrap gap-4">
+                        <h2 class="text-4xl font-extrabold text-white">Your Library</h2>
+                        <div class="flex space-x-3">
+                            <label for="audio-upload-input" class="flex items-center space-x-2 bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-xl transition shadow-lg cursor-pointer">
+                                ${createPlusIcon('w-5 h-5')}
+                                <span>Add Local Songs</span>
+                            </label>
+
+                            <button 
+                                id="open-modal-btn-library"
+                                class="flex items-center space-x-2 bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded-xl transition shadow-lg disabled:opacity-50"
+                                ${!userId ? 'disabled' : ''}
+                            >
+                                ${createPlusIcon('w-5 h-5')}
+                                <span>Create Playlist</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <h3 class="text-3xl font-bold text-white border-t border-gray-800 pt-8">Your Playlists</h3>
+                    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                        ${playlists.length > 0 ? playlistCards : '<p class="text-gray-500 col-span-full">No custom playlists found. Create one above!</p>'}
+                    </div>
+
+                    <h3 class="text-3xl font-bold border-t border-gray-700 pt-8">Local Sample Tracks (${localSongs.length})</h3>
+                    <p class="text-gray-400 mb-4">These tracks are loaded from your device and are available locally for this session.</p>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                        ${songCards}
+                    </div>
+                </div>
+            `;
+
+            // Setup Listeners for Local Upload and Modal
+            document.getElementById('audio-upload-input').addEventListener('change', handleFileSelect);
+            document.getElementById('open-modal-btn-library').addEventListener('click', () => {
+                document.getElementById('create-playlist-modal').classList.remove('hidden');
+            });
+
+            setupCardClickListeners(localSongs, 'local');
+        }
+
+        /**
+         * Renders the Search screen.
+         */
+        function renderSearch() {
+            document.getElementById('main-content').innerHTML = `
+                <div class="space-y-10">
+                    <h2 class="text-4xl font-extrabold text-white">iTunes Store Search</h2>
+                    <div class="flex flex-col sm:flex-row gap-3">
+                        <input 
+                            type="text" 
+                            id="search-input"
+                            placeholder="Search for artists, songs, or albums on iTunes..." 
+                            class="flex-grow p-3 rounded-xl bg-gray-900 text-white border border-gray-700 focus:ring-1 focus:ring-white focus:outline-none placeholder-gray-500 shadow-xl"
+                        />
+                        <button 
+                            id="search-submit-btn"
+                            class="bg-white hover:bg-gray-200 text-black font-semibold py-3 px-6 rounded-xl transition duration-200 shadow-lg"
+                        >
+                            Search
+                        </button>
+                    </div>
+                    
+                    <h3 class="text-3xl font-bold mb-6">Search Results (${searchResults.length} Previews)</h3>
+                    <div id="search-results-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                        </div>
+                </div>
+            `;
+
+            renderSearchContent(); // Initial render of search results container
+            setupSearchEventListeners();
+        }
+
+        /**
+         * Renders the songs within the search results container.
+         */
+        function renderSearchContent() {
+            const resultsContainer = document.getElementById('search-results-container');
+            if (!resultsContainer) return; // Exit if the screen hasn't loaded yet
+
+            if (searchResults.length > 0) {
+                const songCards = searchResults.map(song => createSongCard(song, 'search')).join('');
+                resultsContainer.innerHTML = songCards;
+                resultsContainer.parentNode.querySelector('h3').textContent = `Search Results (${searchResults.length} Previews)`;
+            } else {
+                resultsContainer.innerHTML = `<p class="text-gray-400">Start by searching above to find music previews from the iTunes catalog.</p>`;
+                resultsContainer.parentNode.querySelector('h3').textContent = `Search Results (0 Previews)`;
+            }
+
+            setupCardClickListeners(searchResults, 'search');
+        }
+
+
+        // --- EVENT LISTENER SETUP ---
+
+        /**
+         * Sets up listeners for clicking on song cards.
+         * @param {Array<object>} sourceList - The array of songs to draw from (localSongs or searchResults).
+         * @param {string} type - 'local' or 'search'.
+         */
+        function setupCardClickListeners(sourceList, type) {
+            document.querySelectorAll('.song-card').forEach(card => {
+                // Ensure we only attach listeners for the type of card being displayed
+                if (card.dataset.playlistType === type) {
+                    card.onclick = () => {
+                        const songId = card.dataset.songId;
+                        const song = sourceList.find(s => s.id == songId);
+                        if (song) {
+                            playTrack(song, sourceList);
+                        }
+                    };
+                }
+            });
+        }
+
+        function setupNavCardListeners() {
+            document.querySelectorAll('[data-nav]').forEach(card => {
+                card.onclick = (e) => {
+                    e.preventDefault();
+                    switchView(card.dataset.nav);
+                };
+            });
+        }
+
+        function setupSearchEventListeners() {
+            const searchInput = document.getElementById('search-input');
+            const searchButton = document.getElementById('search-submit-btn');
+
+            searchButton.addEventListener('click', () => {
+                handleSearch(searchInput.value);
+            });
+            searchInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    handleSearch(searchInput.value);
+                }
+            });
+        }
+
+        function setupAuthEventListeners() {
+            let isLoginMode = true;
+            const titleEl = document.getElementById('auth-title');
+            const subtitleEl = document.getElementById('auth-subtitle');
+            const submitBtn = document.getElementById('auth-submit-btn');
+            const toggleBtn = document.getElementById('auth-toggle-mode');
+            const emailInput = document.getElementById('auth-email');
+            const passwordInput = document.getElementById('auth-password');
+            const errorEl = document.getElementById('auth-error');
+
+            const updateAuthUI = () => {
+                titleEl.textContent = isLoginMode ? 'Sign In' : 'Sign Up';
+                submitBtn.textContent = isLoginMode ? 'Sign In' : 'Sign Up';
+                subtitleEl.textContent = isLoginMode ? 'Log in to access your playlists.' : 'Create a new account to save your music.';
+                toggleBtn.textContent = isLoginMode ? 'Need an account? Sign Up' : 'Already have an account? Sign In';
+                errorEl.classList.add('hidden');
+            };
+
+            const handleAuthSubmit = async () => {
+                const email = emailInput.value;
+                const password = passwordInput.value;
+                errorEl.classList.add('hidden');
+
+                if (!email || !password) {
+                    errorEl.textContent = "Please enter both email and password.";
+                    errorEl.classList.remove('hidden');
+                    return;
+                }
+
+                if (password.length < 6) {
+                    errorEl.textContent = "Password must be at least 6 characters.";
+                    errorEl.classList.remove('hidden');
+                    return;
+                }
+
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Processing...';
+
+                try {
+                    if (isLoginMode) {
+                        await signInWithEmailAndPassword(email, password);
+                    } else {
+                        await createUserWithEmailAndPassword(email, password);
+                    }
+                    // updateUserState handles success and view change
+                } catch (error) {
+                    console.error("Auth error:", error);
+                    let message = error.code ? error.code.replace('auth/', '').replace(/-/g, ' ') : error.message;
+                    errorEl.textContent = message.charAt(0).toUpperCase() + message.slice(1);
+                    errorEl.classList.remove('hidden');
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = isLoginMode ? 'Sign In' : 'Sign Up';
+                }
+            };
+
+            toggleBtn.onclick = () => {
+                isLoginMode = !isLoginMode;
+                updateAuthUI();
+            };
+
+            submitBtn.onclick = handleAuthSubmit;
+            // Allow submission on Enter key
+            passwordInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') handleAuthSubmit();
+            });
+
+            updateAuthUI();
+        }
+
+        // --- GLOBAL EVENT LISTENERS ---
+        document.addEventListener('DOMContentLoaded', () => {
+            // Global Nav Listeners
+            document.getElementById('nav-buttons').addEventListener('click', (e) => {
+                if (e.target.classList.contains('nav-btn')) {
+                    const view = e.target.dataset.view;
+                    switchView(view);
+                }
+            });
+
+            // App Title click goes to Home
+            document.getElementById('app-title').addEventListener('click', () => switchView('home'));
+
+            // Sign Out Listener
+            document.getElementById('sign-out-btn').addEventListener('click', async () => {
+                try {
+                    await signOut();
+                    // The updateUserState listener handles the view change to 'auth'
+                } catch (error) {
+                    console.error("Error signing out:", error);
+                    showMessage("Failed to sign out.");
+                }
+            });
+
+            // Modal Listeners
+            document.getElementById('modal-cancel-btn').addEventListener('click', () => {
+                document.getElementById('create-playlist-modal').classList.add('hidden');
+            });
+            document.getElementById('modal-create-btn').addEventListener('click', handleCreatePlaylist);
+            document.getElementById('playlist-name-input').addEventListener('input', (e) => {
+                const button = document.getElementById('modal-create-btn');
+                const error = document.getElementById('modal-error-text');
+                const isNameValid = e.target.value.trim().length > 0;
+
+                if (!userId) {
+                    button.disabled = true;
+                    error.classList.remove('hidden');
+                } else {
+                    button.disabled = !isNameValid;
+                    error.classList.add('hidden');
+                }
+            });
+
+            // Initialization steps
+            initializeLocalStorage(); // NEW: Initialize with localStorage
+            setupAudioListeners();
+            updatePlayerBar(); // Call to set the initial state (icon visible)
+        });
+
+    </script>
+</body>
+
+</html>
